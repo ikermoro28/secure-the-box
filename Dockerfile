@@ -7,6 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Solo instalamos sudo (ya no necesitamos sqlite3)
 RUN apt-get update && \
     apt-get install -y sudo && \
+    apt-get install -y nano && \
     rm -rf /var/lib/apt/lists/*
 
 # Dejamos al usuario en root al entrar
