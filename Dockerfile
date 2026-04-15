@@ -11,7 +11,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Dejamos al usuario en root al entrar
-WORKDIR /root
+WORKDIR ~
 
 # Simplemente mantenemos el contenedor vivo
 CMD ["/bin/bash"]

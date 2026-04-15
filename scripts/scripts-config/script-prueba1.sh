@@ -1,32 +1,27 @@
 #!/bin/bash
 
-# Crea el archivo prueba1 en /home pidiendo permisos de administrador
-touch prueba1
+# Capturamos el nombre de usuario que nos envía Python (o usamos 'admin' por defecto)
+USER_NAME=${1:-admin}
 
-#!/bin/bash
+# 1. Crear el usuario dinámico y darle sudo
+useradd -m -s /bin/bash "$USER_NAME"
+echo "$USER_NAME:stb2024" | chpasswd
+usermod -aG sudo "$USER_NAME"
 
-# 1. Instalación silenciosa del servidor SSH
+# Quitar aviso de sudo y dejar pista para la App
+touch "/home/$USER_NAME/.sudo_as_admin_successful"
+chown "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.sudo_as_admin_successful"
+echo "$USER_NAME" > /tmp/terminal_user.txt
+
+# 2. Instalación y configuración de SSH (igual que antes)
 apt-get update &>/dev/null
 apt-get install -y openssh-server &>/dev/null
-
-# Crear directorio necesario para el demonio sshd
 mkdir -p /run/sshd
-
-# 2. Quitar la contraseña al usuario root
 passwd -d root &>/dev/null
 
-# 3. Configurar SSH para que sea vulnerable y permita entrar a root sin pass
-# Cambiamos el puerto al 222
 echo "Port 222" >> /etc/ssh/sshd_config
-# Permitimos login explícito de root (por defecto suele venir en prohibit-password)
 echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
-# Permitimos contraseñas vacías
 echo "PermitEmptyPasswords yes" >> /etc/ssh/sshd_config
-# Desactivamos PAM para que las reglas estrictas no bloqueen la autenticación vacía
 echo "UsePAM no" >> /etc/ssh/sshd_config
 
-# 4. Arrancar el servicio SSH en segundo plano
 /usr/sbin/sshd
-
-# Opcional: Limpiamos el historial
-history -c

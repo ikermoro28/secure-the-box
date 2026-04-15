@@ -3,6 +3,7 @@ import os
 import subprocess
 import threading
 import sqlite3
+import json  # <--- AÑADE ESTA LÍNEA (importación de json)
 
 # Configuración de apariencia global
 ctk.set_appearance_mode("dark")
@@ -36,16 +37,18 @@ class CustomConfirmDialog(ctk.CTkToplevel):
 
 class SecureTheBoxApp(ctk.CTk):
     def __init__(self):
-        super().__init__()
+        super().__init__(className="Secure The Box") 
+        
         self.title("Secure The Box - Defensive CTF Trainer")
-        self.geometry("750x550") # Un poco más ancho para que quepan los 3 botones
+        self.geometry("750x550") 
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
         # Variables de estado
         self.dificultad_var = ctk.StringVar(value="1")
         self.container_running = False
         self.nombre_contenedor = "maquina_reto"
-        self.ruta_check_actual = None # Para guardar el script de validación
+        self.ruta_check_actual = None
+        self.usuario_terminal_actual = "root"
 
         self.setup_ui()
 
@@ -76,22 +79,25 @@ class SecureTheBoxApp(ctk.CTk):
         self.frame_buttons.pack(pady=20)
 
         # Botones Normales
-        self.btn_launch = ctk.CTkButton(self.frame_buttons, text="🚀 DESPLEGAR ESCENARIO", command=self.start_launch_thread, font=ctk.CTkFont(weight="bold"))
+        self.btn_launch = ctk.CTkButton(self.frame_buttons, text="🚀 DESPLEGAR ESCENARIO", width=220, 
+                                        command=self.start_launch_thread, font=ctk.CTkFont(weight="bold"))
         self.btn_launch.grid(row=0, column=0, padx=10)
 
-        self.btn_stop = ctk.CTkButton(self.frame_buttons, text="⏹ DETENER RETO", command=self.show_inline_confirmation, 
-                                      fg_color="#a51f1f", hover_color="#701414", font=ctk.CTkFont(weight="bold"), state="disabled")
+        self.btn_stop = ctk.CTkButton(self.frame_buttons, text="⏹ DETENER RETO", width=220, 
+                                      command=self.show_inline_confirmation, fg_color="#a51f1f", 
+                                      hover_color="#701414", font=ctk.CTkFont(weight="bold"), state="disabled")
         self.btn_stop.grid(row=0, column=1, padx=10)
 
-        # NUEVO: Botón de Comprobación (Oculto al inicio)
-        self.btn_check = ctk.CTkButton(self.frame_buttons, text="✅ COMPROBAR SEGURIDAD", command=self.start_check_thread, 
-                                      fg_color="#28a745", hover_color="#218838", text_color="white", font=ctk.CTkFont(weight="bold"))
-
+        # Botón de Comprobación (Oculto al inicio)
+        self.btn_check = ctk.CTkButton(self.frame_buttons, text="✅ COMPROBAR SEGURIDAD", width=220, 
+                                      command=self.start_check_thread, fg_color="#28a745", 
+                                      hover_color="#218838", text_color="white", font=ctk.CTkFont(weight="bold"))
+        
         # Botones de Confirmación (Ocultos por defecto)
         self.btn_confirm_yes = ctk.CTkButton(self.frame_buttons, text="⚠️ SÍ, DESTRUIR", command=self.execute_stop, 
                                              fg_color="#a51f1f", hover_color="#701414", font=ctk.CTkFont(weight="bold"))
         self.btn_confirm_no = ctk.CTkButton(self.frame_buttons, text="Cancelar", command=self.hide_inline_confirmation, font=ctk.CTkFont(weight="bold"))
-
+        
     def log(self, message):
         self.textbox_log.insert("end", f"> {message}\n")
         self.textbox_log.see("end")
@@ -100,7 +106,7 @@ class SecureTheBoxApp(ctk.CTk):
     def show_inline_confirmation(self):
         self.btn_launch.grid_remove()
         self.btn_stop.grid_remove()
-        self.btn_check.grid_remove() # Ocultamos el check si estaba activo
+        self.btn_check.grid_remove()
         
         self.btn_confirm_yes.grid(row=0, column=0, padx=10)
         self.btn_confirm_no.grid(row=0, column=1, padx=10)
@@ -113,7 +119,7 @@ class SecureTheBoxApp(ctk.CTk):
         self.btn_launch.grid()
         self.btn_stop.grid()
         if self.container_running:
-            self.btn_check.grid(row=0, column=2, padx=10) # Restauramos el check si hay máquina
+            self.btn_check.grid(row=0, column=2, padx=10)
         self.log("Cancelado. El reto sigue activo.")
 
     def execute_stop(self):
@@ -138,55 +144,67 @@ class SecureTheBoxApp(ctk.CTk):
 
     def launch_challenge(self):
         dificultad = self.dificultad_var.get()
+        import time
+        
+        # Leer usuario del archivo JSON
+        try:
+            with open("challenge_data.json", "r", encoding='utf-8') as f:
+                datos = json.load(f)
+                usuario_objetivo = datos.get("username", "admin")
+                self.log(f"Usuario objetivo leído del JSON: {usuario_objetivo}")
+        except FileNotFoundError:
+            self.log("ADVERTENCIA: No se encontró challenge_data.json. Usando 'admin' por defecto.")
+            usuario_objetivo = "admin"
+        except json.JSONDecodeError:
+            self.log("ADVERTENCIA: Error al leer challenge_data.json. Usando 'admin' por defecto.")
+            usuario_objetivo = "admin"
+        except Exception as e:
+            self.log(f"ADVERTENCIA: Error inesperado al leer JSON: {e}. Usando 'admin' por defecto.")
+            usuario_objetivo = "admin"
+
         self.btn_launch.configure(state="disabled", text="CONSTRUYENDO...")
-        self.btn_stop.configure(state="disabled")
         
         try:
-            # 1. Consulta DB (AHORA TRAE ruta_check TAMBIÉN)
-            self.log(f"Buscando reto de dificultad {dificultad}...")
+            # 1. DB
             conexion = sqlite3.connect('sqlite-scripts.db')
             cursor = conexion.cursor()
             cursor.execute("SELECT ruta_script, ruta_check FROM scripts WHERE nivel_dificultad = ? ORDER BY RANDOM() LIMIT 1", (dificultad,))
-            resultado = cursor.fetchone()
+            res = cursor.fetchone()
             conexion.close()
 
-            if not resultado:
-                self.log("ERROR: No se encontró el script en la DB.")
+            if not res:
+                self.log("ERROR: No hay retos en la DB para esta dificultad.")
                 self.reset_ui()
                 return
 
-            ruta_script = resultado[0]
-            self.ruta_check_actual = resultado[1] # Guardamos la ruta del check
+            ruta_script, self.ruta_check_actual = res
             
-            # 2. Docker Build
-            self.log("Verificando imagen Docker base...")
+            # 2. Build & Run
             subprocess.run(["docker", "build", "-q", "-t", "secure-the-box", "."], check=True)
-
-            # 3. Docker Run
-            self.log("Levantando contenedor...")
             subprocess.run(["docker", "rm", "-f", self.nombre_contenedor], capture_output=True) 
-            subprocess.run(["docker", "run", "-d", "-it", "--name", self.nombre_contenedor, "secure-the-box", "/bin/bash"], check=True)
-            self.container_running = True
-
-            # 4. Inyectar Vulnerabilidad
-            self.log("Configurando escenario...")
+            subprocess.run(["docker", "run", "-d", "-it", "--name", self.nombre_contenedor, "--hostname", "securethebox", "secure-the-box", "/bin/bash"], check=True)
+            
+            # 3. Setup (Pasando el usuario del JSON como argumento $1)
             subprocess.run(["docker", "cp", ruta_script, f"{self.nombre_contenedor}:/tmp/setup.sh"], check=True)
-            comando_setup = "bash /tmp/setup.sh && rm -f /tmp/setup.sh"
-            subprocess.run(["docker", "exec", self.nombre_contenedor, "/bin/bash", "-c", comando_setup], check=True)
+            subprocess.run(["docker", "exec", self.nombre_contenedor, "/bin/bash", "-c", f"bash /tmp/setup.sh {usuario_objetivo} && rm -f /tmp/setup.sh"], check=True)
 
-            # 5. Interfaz en modo "En Ejecución"
-            self.log("¡LISTO! Terminal abierta.")
+            time.sleep(1) 
+
+            # 4. Leer pista de usuario real creado
+            result_user = subprocess.run(["docker", "exec", self.nombre_contenedor, "cat", "/tmp/terminal_user.txt"], capture_output=True, text=True)
+            self.usuario_terminal_actual = result_user.stdout.strip() if result_user.returncode == 0 else usuario_objetivo
+            
+            # 5. UI & Terminal
+            self.container_running = True
+            self.log(f"¡LISTO! Terminal abierta como: {self.usuario_terminal_actual}")
             self.btn_launch.configure(text="RETO ACTIVO")
             self.btn_stop.configure(state="normal")
-            
-            # ¡Mostramos el botón de comprobación mágico!
             self.btn_check.grid(row=0, column=2, padx=10)
             
-            # Abrir Terminal
-            subprocess.run(["gnome-terminal", "--", "docker", "exec", "-it", self.nombre_contenedor, "/bin/bash"])
+            subprocess.run(["gnome-terminal", "--", "docker", "exec", "-it", "-u", self.usuario_terminal_actual, self.nombre_contenedor, "/bin/bash"])
 
         except Exception as e:
-            self.log(f"ERROR: {str(e)}")
+            self.log(f"ERROR: {e}")
             self.reset_ui()
 
     def check_challenge(self):
@@ -203,7 +221,7 @@ class SecureTheBoxApp(ctk.CTk):
                 capture_output=True, text=True
             )
 
-            # 3. Mostramos la salida en la consola de la App (Aquí se verá la Flag o el Error)
+            # 3. Mostramos la salida en la consola de la App
             salida = resultado.stdout.strip()
             if resultado.returncode == 0:
                 self.log(f"--- RESULTADO DE AUDITORÍA ---\n{salida}\n------------------------------")
@@ -228,12 +246,13 @@ class SecureTheBoxApp(ctk.CTk):
         self.reset_ui()
 
     def reset_ui(self):
-        self.btn_launch.configure(state="normal", text="DESPLEGAR ESCENARIO")
-        self.btn_stop.configure(state="disabled", text="DETENER RETO")
-        self.btn_check.grid_remove() # Ocultamos el botón de check
+        self.btn_launch.configure(state="normal", text="🚀 DESPLEGAR ESCENARIO")
+        self.btn_stop.configure(state="disabled", text="⏹ DETENER RETO")
+        self.btn_check.grid_remove()
         self.container_running = False
         self.ruta_check_actual = None
-
+        self.usuario_terminal_actual = "root"
+        
     def on_closing(self):
         if self.container_running:
             CustomConfirmDialog(self, "Salir de la app", "Hay un reto en ejecución. ¿Destruir el contenedor y salir?", self.destroy_and_quit)
