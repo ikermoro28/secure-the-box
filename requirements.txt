@@ -1,0 +1,16 @@
+# Secure The Box - Defensive CTF Trainer
+# ======================================
+
+# GUI Framework
+customtkinter>=5.2.0
+
+# Notas adicionales:
+# - Se requiere Docker instalado en el sistema
+# - Se requiere gnome-terminal para la funcionalidad de terminal
+# - Los siguientes módulos son parte de la biblioteca estándar de Python 3.8+:
+#   * os
+#   * subprocess
+#   * threading
+#   * sqlite3
+#   * json
+#   * time
