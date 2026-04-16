@@ -13,15 +13,5 @@ touch "/home/$USER_NAME/.sudo_as_admin_successful"
 chown "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.sudo_as_admin_successful"
 echo "$USER_NAME" > /tmp/terminal_user.txt
 
-# 2. Instalación y configuración de SSH (igual que antes)
-apt-get update &>/dev/null
-apt-get install -y openssh-server &>/dev/null
-mkdir -p /run/sshd
-passwd -d root &>/dev/null
-
-echo "Port 222" >> /etc/ssh/sshd_config
-echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
-echo "PermitEmptyPasswords yes" >> /etc/ssh/sshd_config
-echo "UsePAM no" >> /etc/ssh/sshd_config
-
-/usr/sbin/sshd
+# Crea el archivo prueba3 en /home pidiendo permisos de administrador
+touch Nivel_Medio

@@ -8,6 +8,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
     apt-get install -y sudo && \
     apt-get install -y nano && \
+#    apt-get install -y openssh-server && \
     rm -rf /var/lib/apt/lists/*
 
 # Dejamos al usuario en root al entrar
