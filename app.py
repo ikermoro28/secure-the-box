@@ -73,7 +73,7 @@ class SecureTheBoxApp(ctk.CTk):
         # --- Consola ---
         self.textbox_log = ctk.CTkTextbox(self, height=200, width=650, font=("Consolas", 12))
         self.textbox_log.pack(pady=10, padx=20)
-        self.log("🟢 Sistema iniciado. Esperando selección de reto...")
+        self.log("Sistema iniciado. Esperando selección de reto...")
 
         # --- Botonera Principal Dinámica ---
         self.frame_buttons = ctk.CTkFrame(self, fg_color="transparent")
@@ -114,7 +114,7 @@ class SecureTheBoxApp(ctk.CTk):
         
         self.btn_confirm_yes.grid(row=0, column=0, padx=10)
         self.btn_confirm_no.grid(row=0, column=1, padx=10)
-        self.log("⚠️ ¿Estás seguro de que quieres detener el reto? El progreso no guardado se perderá.")
+        self.log("¿Estás seguro de que quieres detener el reto? El progreso no guardado se perderá.")
 
     def hide_inline_confirmation(self):
         self.btn_confirm_yes.grid_remove()
@@ -124,7 +124,7 @@ class SecureTheBoxApp(ctk.CTk):
         self.btn_stop.grid()
         if self.container_running:
             self.btn_check.grid(row=0, column=2, padx=10)
-        self.log("✅ Cancelado. El reto sigue activo.")
+        self.log("Cancelado. El reto sigue activo.")
 
     def execute_stop(self):
         self.hide_inline_confirmation()
@@ -141,41 +141,35 @@ class SecureTheBoxApp(ctk.CTk):
 
     def start_check_thread(self):
         if not self.ruta_check_actual:
-            self.log("❌ ERROR: No hay script de validación asignado a este reto.")
+            self.log("ERROR: No hay script de validación asignado a este reto.")
             return
         thread = threading.Thread(target=self.check_challenge, daemon=True)
         thread.start()
 
     def launch_challenge(self):
         dificultad = self.dificultad_var.get()
-        
-        self.log("🚀 INICIANDO PROCESO DE DESPLIEGUE...")
-        self.log(f"📊 Dificultad seleccionada: Nivel {dificultad}")
+        self.log("")
         self.log("=" * 50)
+        self.log("INICIANDO PROCESO DE DESPLIEGUE...")
+        # self.log("")
         
-        # PASO 1: Leer archivo JSON
-        self.log("📂 [PASO 1/7] Leyendo archivo de configuración challenge_data.json...")
         try:
             with open("challenge_data.json", "r", encoding='utf-8') as f:
                 datos = json.load(f)
                 usuario_objetivo = datos.get("username", "admin")
-                self.log(f"   ✓ Usuario objetivo leído del JSON: {usuario_objetivo}")
         except FileNotFoundError:
-            self.log("   ⚠️ ADVERTENCIA: No se encontró challenge_data.json. Usando 'admin' por defecto.")
+            self.log("ADVERTENCIA: No se encontró challenge_data.json. Usando 'admin' por defecto.")
             usuario_objetivo = "admin"
         except json.JSONDecodeError:
-            self.log("   ⚠️ ADVERTENCIA: Error al leer challenge_data.json. Usando 'admin' por defecto.")
+            self.log("ADVERTENCIA: Error al leer challenge_data.json. Usando 'admin' por defecto.")
             usuario_objetivo = "admin"
         except Exception as e:
-            self.log(f"   ⚠️ ADVERTENCIA: Error inesperado al leer JSON: {e}. Usando 'admin' por defecto.")
+            self.log(f"ADVERTENCIA: Error inesperado al leer JSON: {e}. Usando 'admin' por defecto.")
             usuario_objetivo = "admin"
 
         self.btn_launch.configure(state="disabled", text="🔨 CONSTRUYENDO...")
         
         try:
-            # PASO 2: Consultar base de datos
-            self.log("🗄️ [PASO 2/7] Consultando base de datos SQLite...")
-            self.log(f"   Buscando reto de dificultad nivel {dificultad}...")
             conexion = sqlite3.connect('sqlite-scripts.db')
             cursor = conexion.cursor()
             cursor.execute("SELECT ruta_script, ruta_check FROM scripts WHERE nivel_dificultad = ? ORDER BY RANDOM() LIMIT 1", (dificultad,))
@@ -183,49 +177,26 @@ class SecureTheBoxApp(ctk.CTk):
             conexion.close()
             
             if not res:
-                self.log("   ❌ ERROR: No hay retos en la DB para esta dificultad.")
+                self.log("ERROR: No hay retos en la DB para esta dificultad.")
                 self.reset_ui()
                 return
             
             ruta_script, self.ruta_check_actual = res
-            self.log(f"   ✓ Reto seleccionado: {os.path.basename(ruta_script)}")
-            self.log(f"   ✓ Script de validación: {os.path.basename(self.ruta_check_actual)}")
-            
-            # PASO 3: Construir imagen Docker
-            self.log("🐳 [PASO 3/7] Construyendo imagen Docker 'secure-the-box'...")
-            self.log("   Ejecutando: docker build -q -t secure-the-box .")
+            self.log("Construyendo y configurando el entorno...")
+            self.log("Esto puede tardar unos segundos...")
             resultado_build = subprocess.run(["docker", "build", "-q", "-t", "secure-the-box", "."], 
                                            capture_output=True, text=True)
-            if resultado_build.returncode == 0:
-                self.log(f"   ✓ Imagen Docker construida correctamente")
-                if resultado_build.stdout.strip():
-                    self.log(f"   ID de imagen: {resultado_build.stdout.strip()[:12]}")
-            else:
-                self.log(f"   ❌ Error en build: {resultado_build.stderr}")
+            if resultado_build.returncode != 0:
+                self.log(f"Error en build: {resultado_build.stderr}")
                 raise Exception("Error en docker build")
             
-            # PASO 4: Limpiar contenedores anteriores
-            self.log("🧹 [PASO 4/7] Limpiando contenedores anteriores...")
             subprocess.run(["docker", "rm", "-f", self.nombre_contenedor], capture_output=True)
-            self.log(f"   ✓ Contenedor '{self.nombre_contenedor}' eliminado (si existía)")
             
-            # PASO 5: Iniciar contenedor
-            self.log("🚀 [PASO 5/7] Iniciando nuevo contenedor...")
-            self.log(f"   Ejecutando: docker run -d -it --name {self.nombre_contenedor} --hostname securethebox secure-the-box")
-            resultado_run = subprocess.run(["docker", "run", "-d", "-it", "--name", self.nombre_contenedor, 
+            subprocess.run(["docker", "run", "-d", "-it", "--name", self.nombre_contenedor, 
                                           "--hostname", "securethebox", "secure-the-box", "/bin/bash"], 
                                          capture_output=True, text=True, check=True)
-            container_id = resultado_run.stdout.strip()[:12]
-            self.log(f"   ✓ Contenedor iniciado: {container_id}")
             
-            # PASO 6: Configurar el contenedor
-            self.log("⚙️ [PASO 6/7] Configurando el contenedor...")
-            self.log(f"   Copiando script de setup: {os.path.basename(ruta_script)}")
             subprocess.run(["docker", "cp", ruta_script, f"{self.nombre_contenedor}:/tmp/setup.sh"], check=True)
-            self.log("   ✓ Script copiado correctamente")
-            
-            self.log(f"   Ejecutando script de setup con usuario: {usuario_objetivo}")
-            self.log("   ⏳ Instalando SSH y configurando servicios... (esto puede tomar unos segundos)")
             
             resultado_setup = subprocess.run(
                 ["docker", "exec", self.nombre_contenedor, "/bin/bash", "-c", 
@@ -233,128 +204,104 @@ class SecureTheBoxApp(ctk.CTk):
                 capture_output=True, text=True
             )
             
-            if resultado_setup.returncode == 0:
-                self.log("   ✓ Script de setup ejecutado correctamente")
-            else:
-                self.log(f"   ⚠️ Setup completado con warnings: {resultado_setup.stderr[:100]}...")
+            if resultado_setup.returncode != 0:
+                self.log(f"Setup completado con warnings: {resultado_setup.stderr[:100]}...")
 
-            time.sleep(2)  # Dar tiempo a que todo se inicialice
+            time.sleep(2)
 
-            # PASO 7: Verificar usuario creado
-            self.log("👤 [PASO 7/7] Verificando usuario creado...")
             result_user = subprocess.run(
                 ["docker", "exec", self.nombre_contenedor, "cat", "/tmp/terminal_user.txt"], 
                 capture_output=True, text=True
             )
             self.usuario_terminal_actual = result_user.stdout.strip() if result_user.returncode == 0 else usuario_objetivo
-            self.log(f"   ✓ Usuario verificado: {self.usuario_terminal_actual}")
             
-            # Verificar SSH
-            self.log("🔍 Verificando servicio SSH...")
             result_ssh = subprocess.run(
                 ["docker", "exec", self.nombre_contenedor, "pgrep", "sshd"],
                 capture_output=True
             )
-            if result_ssh.returncode == 0:
-                self.log("   ✓ Servicio SSH iniciado correctamente en puerto 222")
-            else:
-                self.log("   ⚠️ Servicio SSH podría no estar ejecutándose")
+            if result_ssh.returncode != 0:
+                self.log("ADVERTENCIA: El servicio SSH podría no estar ejecutándose.")
             
             # FINALIZACIÓN
             self.container_running = True
+            self.log("")
             self.log("=" * 50)
-            self.log("🎉 ¡ESCENARIO DESPLEGADO CON ÉXITO!")
-            self.log(f"💻 Terminal abierta como usuario: {self.usuario_terminal_actual}")
-            self.log(f"🔑 Contraseña del usuario: stb2024")
-            self.log("📝 Usa el botón 'COMPROBAR SEGURIDAD' cuando hayas terminado de asegurar el sistema")
-            self.log("=" * 50)
-            
+            self.log("¡ESCENARIO DESPLEGADO CON ÉXITO!")
+            self.log(f"Terminal abierta como usuario: {self.usuario_terminal_actual}")
+            self.log(f"Contraseña del usuario: stb2024")
+            self.log("Usa el botón 'COMPROBAR SEGURIDAD' para probar la seguridad")
+            self.log("")
             self.btn_launch.configure(text="✅ RETO ACTIVO")
             self.btn_stop.configure(state="normal")
             self.btn_check.grid(row=0, column=2, padx=10)
             
-            # Abrir terminal
-            self.log("🖥️ Abriendo terminal interactiva...")
             subprocess.Popen(["gnome-terminal", "--", "docker", "exec", "-it", "-u", self.usuario_terminal_actual, 
                             self.nombre_contenedor, "/bin/bash"])
-
+	
         except Exception as e:
             self.log("=" * 50)
-            self.log(f"❌ ERROR CRÍTICO: {str(e)}")
-            self.log("🔄 Revirtiendo cambios...")
+            self.log(f"ERROR CRÍTICO: {str(e)}")
+            self.log("Revirtiendo cambios...")
             self.reset_ui()
 
     def check_challenge(self):
         self.btn_check.configure(state="disabled", text="🔍 EVALUANDO...")
         self.log("=" * 50)
-        self.log("🔒 INICIANDO AUDITORÍA DE SEGURIDAD...")
-        
+        self.log("INICIANDO AUDITORÍA DE SEGURIDAD...")
+        self.log("Evaluando configuraciones y servicios...")
+        self.log("")
         try:
-            self.log(f"📤 [1/3] Copiando script de auditoría al contenedor...")
-            self.log(f"   Script: {os.path.basename(self.ruta_check_actual)}")
-            subprocess.run(["docker", "cp", self.ruta_check_actual, f"{self.nombre_contenedor}:/tmp/check.sh"], check=True)
-            self.log("   ✓ Script copiado correctamente")
+            subprocess.run(["docker", "cp", self.ruta_check_actual, f"{self.nombre_contenedor}:/tmp/check.py"], check=True)
             
-            self.log("🔧 [2/3] Ejecutando script de auditoría...")
-            comando_check = "bash /tmp/check.sh; rm -f /tmp/check.sh"
+            # Usar trap para eliminar el archivo automáticamente al salir
+            comando_check = "trap 'rm -f /tmp/check.py' EXIT; bash /tmp/check.py"
             resultado = subprocess.run(
                 ["docker", "exec", self.nombre_contenedor, "/bin/bash", "-c", comando_check],
                 capture_output=True, text=True
             )
-
-            self.log("📊 [3/3] Analizando resultados...")
+    
             salida = resultado.stdout.strip()
             
-            self.log("=" * 50)
+            # Mostrar la salida completa del script de auditoría
+            if salida:
+                for linea in salida.split('\n'):
+                    if linea.strip():
+                        self.log(f"{linea}")
+            
+            # self.log("=" * 50)
+            
+            # Evaluar resultado final basado en el código de retorno
             if resultado.returncode == 0:
-                self.log("✅ AUDITORÍA COMPLETADA - SISTEMA SEGURO")
-                self.log("─" * 40)
-                if salida:
-                    for linea in salida.split('\n'):
-                        self.log(f"   {linea}")
-                else:
-                    self.log("   ✓ No se detectaron vulnerabilidades críticas")
+                self.log("¡ENHORABUENA! El sistema ha sido asegurado correctamente")
+                self.log("Puedes probar otro nivel de dificultad o detener el reto")
             else:
-                self.log("⚠️ AUDITORÍA COMPLETADA - SE ENCONTRARON VULNERABILIDADES")
-                self.log("─" * 40)
-                if salida:
-                    for linea in salida.split('\n'):
-                        if linea.strip():
-                            self.log(f"   ❌ {linea}")
-                else:
-                    self.log("   ⚠️ El script de auditoría reportó errores")
-            
-            if resultado.stderr:
-                self.log("─" * 40)
-                self.log(f"   Mensajes del sistema: {resultado.stderr[:200]}")
+                self.log("El sistema aún tiene vulnerabilidades que necesitan ser corregidas")
+                self.log("Revisa las configuraciones de seguridad y continúa trabajando")
             
             self.log("=" * 50)
-
+    
         except Exception as e:
-            self.log(f"❌ ERROR durante la auditoría: {str(e)}")
+            self.log("=" * 50)
+            self.log(f"ERROR durante la auditoría: {str(e)}")
+            self.log("=" * 50)
         finally:
             self.btn_check.configure(state="normal", text="✅ COMPROBAR SEGURIDAD")
-            self.log("🔄 Auditoría finalizada. Puedes seguir trabajando en el reto.")
 
     def stop_challenge(self):
         self.log("=" * 50)
-        self.log("🛑 INICIANDO PROCESO DE DETENCIÓN...")
+        self.log("DETENIENDO RETO Y LIMPIANDO ENTORNO...")
         self.btn_stop.configure(state="disabled", text="⏹ DETENIENDO...")
         
         try:
-            self.log("🗑️ [1/2] Deteniendo contenedor Docker...")
             subprocess.run(["docker", "rm", "-f", self.nombre_contenedor], capture_output=True)
-            self.log(f"   ✓ Contenedor '{self.nombre_contenedor}' eliminado")
-            
-            self.log("🧹 [2/2] Limpiando estado de la aplicación...")
             self.container_running = False
             
             self.log("=" * 50)
-            self.log("✅ Entorno limpio. Puedes seleccionar otro reto.")
+            self.log("Entorno limpio. Puedes seleccionar otro reto.")
             self.log("=" * 50)
             
         except Exception as e:
-            self.log(f"❌ Error al detener: {e}")
+            self.log(f"Error al detener: {e}")
         
         self.reset_ui()
 
@@ -365,7 +312,6 @@ class SecureTheBoxApp(ctk.CTk):
         self.container_running = False
         self.ruta_check_actual = None
         self.usuario_terminal_actual = "root"
-        self.log("🔄 Interfaz reiniciada. Listo para nuevo reto.")
         
     def on_closing(self):
         if self.container_running:
@@ -374,7 +320,7 @@ class SecureTheBoxApp(ctk.CTk):
             self.destroy()
 
     def destroy_and_quit(self):
-        self.log("👋 Cerrando aplicación...")
+        self.log("Cerrando aplicación...")
         subprocess.run(["docker", "rm", "-f", self.nombre_contenedor], capture_output=True)
         self.destroy()
 
