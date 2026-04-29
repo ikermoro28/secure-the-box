@@ -18,7 +18,6 @@ class CustomConfirmDialog(ctk.CTkToplevel):
         self.callback = callback
         self.transient(parent)
         self.grab_set()
-        
         self.label = ctk.CTkLabel(self, text=message, wraplength=350, font=ctk.CTkFont(size=14))
         self.label.pack(pady=30)
 
@@ -39,7 +38,8 @@ class CustomConfirmDialog(ctk.CTkToplevel):
 class SecureTheBoxApp(ctk.CTk):
     def __init__(self):
         super().__init__(className="Secure The Box") 
-        
+        self.puntuacion_base_actual = 0  # <--- Añade esta línea
+        self.start_time = 0             # También inicializamos el tiempo
         self.title("Secure The Box - Defensive CTF Trainer")
         self.geometry("750x550") 
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -99,13 +99,21 @@ class SecureTheBoxApp(ctk.CTk):
                                              fg_color="#a51f1f", hover_color="#701414", font=ctk.CTkFont(weight="bold"))
         self.btn_confirm_no = ctk.CTkButton(self.frame_buttons, text="Cancelar", command=self.hide_inline_confirmation, font=ctk.CTkFont(weight="bold"))
         
+#    def log(self, message):
+#        """Añade un mensaje con timestamp a la consola"""
+#        timestamp = time.strftime("%H:%M:%S")
+#        self.textbox_log.insert("end", f"[{timestamp}] {message}\n")
+#        self.textbox_log.see("end")
+#        self.update()  # Forzar actualización de la UI
     def log(self, message):
-        """Añade un mensaje con timestamp a la consola"""
-        timestamp = time.strftime("%H:%M:%S")
-        self.textbox_log.insert("end", f"[{timestamp}] {message}\n")
-        self.textbox_log.see("end")
-        self.update()  # Forzar actualización de la UI
-
+        """Añade un mensaje a la consola con estilo prompt minimalista"""
+        # Si el mensaje está vacío o es una línea separadora (====), lo imprimimos tal cual
+        if message.strip() == "" or message.startswith("="):
+            self.textbox_log.insert("end", f"{message}\n")
+        else:
+            self.textbox_log.insert("end", f" >> {message}\n")
+            self.textbox_log.see("end")
+            self.update()
     # --- LÓGICA DE INTERFAZ DINÁMICA ---
     def show_inline_confirmation(self):
         self.btn_launch.grid_remove()
@@ -172,7 +180,7 @@ class SecureTheBoxApp(ctk.CTk):
         try:
             conexion = sqlite3.connect('sqlite-scripts.db')
             cursor = conexion.cursor()
-            cursor.execute("SELECT ruta_script, ruta_check FROM scripts WHERE nivel_dificultad = ? ORDER BY RANDOM() LIMIT 1", (dificultad,))
+            cursor.execute("SELECT ruta_script, ruta_check, puntos_base FROM scripts WHERE nivel_dificultad = ? ORDER BY RANDOM() LIMIT 1", (dificultad,))
             res = cursor.fetchone()
             conexion.close()
             
@@ -181,7 +189,7 @@ class SecureTheBoxApp(ctk.CTk):
                 self.reset_ui()
                 return
             
-            ruta_script, self.ruta_check_actual = res
+            ruta_script, self.ruta_check_actual, self.puntuacion_base_actual = res
             self.log("Construyendo y configurando el entorno...")
             self.log("Esto puede tardar unos segundos...")
             resultado_build = subprocess.run(["docker", "build", "-q", "-t", "secure-the-box", "."], 
@@ -196,7 +204,7 @@ class SecureTheBoxApp(ctk.CTk):
                                           "--hostname", "securethebox", "secure-the-box", "/bin/bash"], 
                                          capture_output=True, text=True, check=True)
             
-            subprocess.run(["docker", "cp", ruta_script, f"{self.nombre_contenedor}:/tmp/setup.sh"], check=True)
+            subprocess.run(["docker", "cp", ruta_script, f"{self.nombre_contenedor}:/tmp/setup.sh"], check=True, capture_output=True)
             
             resultado_setup = subprocess.run(
                 ["docker", "exec", self.nombre_contenedor, "/bin/bash", "-c", 
@@ -223,6 +231,7 @@ class SecureTheBoxApp(ctk.CTk):
                 self.log("ADVERTENCIA: El servicio SSH podría no estar ejecutándose.")
             
             # FINALIZACIÓN
+            
             self.container_running = True
             self.log("")
             self.log("=" * 50)
@@ -230,6 +239,8 @@ class SecureTheBoxApp(ctk.CTk):
             self.log(f"Terminal abierta como usuario: {self.usuario_terminal_actual}")
             self.log(f"Contraseña del usuario: stb2024")
             self.log("Usa el botón 'COMPROBAR SEGURIDAD' para probar la seguridad")
+            self.start_time = time.time() # Guardamos la hora de inicio
+            self.log("Cronómetro iniciado. ¡Buena suerte!")
             self.log("")
             self.btn_launch.configure(text="✅ RETO ACTIVO")
             self.btn_stop.configure(state="normal")
@@ -245,47 +256,54 @@ class SecureTheBoxApp(ctk.CTk):
             self.reset_ui()
 
     def check_challenge(self):
-        self.btn_check.configure(state="disabled", text="🔍 EVALUANDO...")
+        if not self.container_running or not self.ruta_check_actual:
+            return
+
         self.log("=" * 50)
         self.log("INICIANDO AUDITORÍA DE SEGURIDAD...")
-        self.log("Evaluando configuraciones y servicios...")
-        self.log("")
+    
         try:
-            subprocess.run(["docker", "cp", self.ruta_check_actual, f"{self.nombre_contenedor}:/tmp/check.py"], check=True)
-            
-            # Usar trap para eliminar el archivo automáticamente al salir
-            comando_check = "trap 'rm -f /tmp/check.py' EXIT; bash /tmp/check.py"
+            # 1. Copiamos el script de check al contenedor (silencioso)
+            subprocess.run(["docker", "cp", self.ruta_check_actual, f"{self.nombre_contenedor}:/tmp/check.py"], 
+                           check=True, capture_output=True)
+
+            # 2. Ejecutamos el check
+            # El script de la máquina solo debe imprimir si es vulnerable o no y salir con 0 o 1
             resultado = subprocess.run(
-                ["docker", "exec", self.nombre_contenedor, "/bin/bash", "-c", comando_check],
+                ["docker", "exec", self.nombre_contenedor, "python3", "/tmp/check.py"],
                 capture_output=True, text=True
             )
-    
-            salida = resultado.stdout.strip()
-            
-            # Mostrar la salida completa del script de auditoría
-            if salida:
-                for linea in salida.split('\n'):
-                    if linea.strip():
-                        self.log(f"{linea}")
-            
-            # self.log("=" * 50)
-            
-            # Evaluar resultado final basado en el código de retorno
+
+            # 3. Calculamos tiempo transcurrido
+            elapsed_seconds = int(time.time() - self.start_time)
+            minutos = elapsed_seconds // 60
+            segundos = elapsed_seconds % 60
+            tiempo_texto = f"{minutos}m {segundos}s"
+
+            # 4. Si el código de salida es 0, el reto está superado
             if resultado.returncode == 0:
-                self.log("¡ENHORABUENA! El sistema ha sido asegurado correctamente")
-                self.log("Puedes probar otro nivel de dificultad o detener el reto")
-            else:
-                self.log("El sistema aún tiene vulnerabilidades que necesitan ser corregidas")
-                self.log("Revisa las configuraciones de seguridad y continúa trabajando")
+                # Lógica de puntuación basada en tus tramos
+                if elapsed_seconds <= 240:          # 1-4 min
+                    puntos_ganados = self.puntuacion_base_actual
+                elif elapsed_seconds <= 600:        # 5-10 min
+                    puntos_ganados = int(self.puntuacion_base_actual * 0.75)
+                else:                               # 10+ min
+                    puntos_ganados = int(self.puntuacion_base_actual * 0.50)
+
+                self.log("✅ RESULTADO: SISTEMA SEGURO")
+                self.log(f" > Tiempo empleado: {tiempo_texto}")
+                self.log(f" > Puntuación: {puntos_ganados} / {self.puntuacion_base_actual} pts")
+                self.log("=" * 50)
             
-            self.log("=" * 50)
-    
+               # Aquí podrías añadir una llamada a la DB para guardar el récord del usuario
+            else:
+                self.log("❌ RESULTADO: SISTEMA VULNERABLE")
+                self.log("Revisa la configuración y vuelve a intentarlo.")
+            # Opcional: mostrar el error que devuelve el script de la máquina
+            # self.log(f"Detalle: {resultado.stdout}")
+
         except Exception as e:
-            self.log("=" * 50)
-            self.log(f"ERROR durante la auditoría: {str(e)}")
-            self.log("=" * 50)
-        finally:
-            self.btn_check.configure(state="normal", text="✅ COMPROBAR SEGURIDAD")
+            self.log(f"ERROR CRÍTICO DURANTE EL CHECK: {e}")
 
     def stop_challenge(self):
         self.log("=" * 50)
@@ -312,6 +330,8 @@ class SecureTheBoxApp(ctk.CTk):
         self.container_running = False
         self.ruta_check_actual = None
         self.usuario_terminal_actual = "root"
+        self.puntuacion_base_actual = 0
+        self.start_time = 0
         
     def on_closing(self):
         if self.container_running:
