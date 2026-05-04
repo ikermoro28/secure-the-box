@@ -1,0 +1,40 @@
+Paso 1: Reconocimiento y extracción del banner
+Antes de actuar, un buen analista debe verificar qué puertos están abiertos y qué servicio está dando la cara en ellos.
+
+Comandos de detección:
+sudo ss -tulnp (Muestra los puertos a la escucha y los procesos asociados; veremos que el puerto 21 está activo).
+
+nc localhost 21 (Al conectarnos al puerto, el servidor responde con el banner "ProFTPD 1.3.5", confirmando que es una versión con la vulnerabilidad crítica CVE-2015-3306 de copia de archivos).
+
+Explicación: Confirmamos la exposición y la versión del software. (El jugador debe pulsar Ctrl+C para salir de la conexión de netcat).
+
+Paso 2: Análisis de procesos y detección de anomalías
+Una vez confirmada la versión vulnerable, hay que comprobar si el servicio expuesto es el binario oficial del sistema o si se trata de un emulador malicioso plantado por un atacante.
+
+Comando: ps aux | grep proftpd
+
+Explicación: Al listar los procesos en memoria, el jugador observará que el servicio FTP no lo está ejecutando el sistema de forma nativa, sino un script de Python llamado proftpd_rogue.py. Esto confirma que el entorno está ejecutando un proceso ilegítimo que debe ser destruido.
+
+Paso 3: Detener y erradicar el servicio malicioso
+Para poder instalar un servicio limpio y cerrar el vector de ataque actual, primero hay que aniquilar el proceso fraudulento que tiene secuestrado el puerto 21.
+
+Comando de remediación: sudo pkill -9 -f proftpd_rogue.py
+
+Explicación: Este comando envía una señal de finalización forzada e inmediata a cualquier proceso en memoria que coincida con el nombre del script de Python. Al ejecutarlo, el malware se destruye y el puerto 21 queda completamente libre.
+
+Paso 4: Instalar la versión oficial y parcheada
+La empresa sigue necesitando un servidor FTP para operar, por lo que hay que instalar el software legítimo desde los repositorios oficiales, asegurando así que viene sin vulnerabilidades.
+
+Comando: sudo apt-get update && sudo apt-get install -y proftpd-core
+
+Explicación: Este comando actualiza la lista de paquetes del sistema e instala el servidor ProFTPD real. Si durante la instalación aparece una pantalla de configuración preguntando cómo ejecutar el servicio, el jugador simplemente debe seleccionar la opción "standalone" (independiente).
+
+Paso 5: Levantar el servicio legítimo
+Finalmente, hay que arrancar el servidor FTP recién instalado para restaurar la operatividad de la red de forma segura.
+
+Comandos (dependiendo de las restricciones del contenedor):
+sudo service proftpd start (Para intentar lanzarlo a través del gestor de servicios estándar).
+
+sudo proftpd (Ejecución directa del binario, ideal si el comando anterior falla por estar dentro de Docker).
+
+Explicación: Este paso arranca el demonio legítimo de ProFTPD. Cuando el script de validación evalúe la máquina, se conectará al puerto 21, verá que responde un banner moderno y actualizado (versiones superiores a la 1.3.5), y comprobará que la vulnerabilidad de ejecución remota ya no funciona, marcando el escenario como superado.

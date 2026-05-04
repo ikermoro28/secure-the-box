@@ -344,7 +344,7 @@ class SecureTheBoxApp(ctk.CTk):
         self.log("INICIANDO AUDITORÍA DE SEGURIDAD...")
     
         try:
-            subprocess.run(["docker", "cp", self.ruta_check_actual, f"{self.nombre_contenedor}:/tmp/check.py"], 
+            subprocess.run(["docker", "cp", self.ruta_check_actual.strip(), f"{self.nombre_contenedor}:/tmp/check.py"], 
                            check=True, capture_output=True)
 
             resultado = subprocess.run(

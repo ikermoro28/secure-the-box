@@ -1,0 +1,50 @@
+🏆 Reto Extra (Modo Dios): Securización Criptográfica (CWE-319)
+El Contexto del Defensor: El servidor tiene un FTP legítimo (VSFTPD) corriendo y no hay malware. Sin embargo, en la auditoría de cumplimiento (Compliance), te informan de que los credenciales de la empresa podrían estar viajando en texto plano.
+
+Fase 1: Detección Activa (Comprobando la falta de cifrado)
+Un buen defensor de Blue Team no se fía de los archivos de configuración a ciegas; primero simula una conexión cliente para ver si el servidor admite o rechaza el cifrado.
+
+Pensamiento: "Si intento forzar una conexión TLS, ¿el servidor me lo permite?"
+
+Comandos:
+
+Conectarse al FTP: nc localhost 21
+
+Enviar el comando que solicita cifrado: AUTH TLS
+
+Lo que descubre: El servidor responderá algo como 530 Please login with USER and PASS o 500 Unknown command. Si tuviera SSL activado, respondería 234 Proceed with negotiation. Esto confirma la brecha: no hay cifrado.
+(Método alternativo de auditoría: cat /etc/vsftpd.conf | grep ssl y ver que pone ssl_enable=NO).
+
+Fase 2: Preparación (Creando la criptografía)
+Para que el tráfico se cifre, el servidor necesita un par de claves (Pública y Privada). En un entorno real se compraría un certificado, aquí lo autogeneramos.
+
+Pensamiento: "Debo generar un certificado X.509 y una clave RSA para que VSFTPD pueda negociar el túnel seguro."
+
+Comando: openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/vsftpd.pem -out /etc/ssl/private/vsftpd.pem
+(Pulsar Enter a todas las preguntas de país, organización, etc., para dejar los valores por defecto).
+
+Fase 3: Hardening (Forzando la configuración)
+Hay que modificar la configuración del demonio para que use nuestro certificado y obligue a usar cifrado.
+
+Pensamiento: "Tengo que decirle al FTP dónde está el certificado y cambiar la directiva que deniega el SSL."
+
+Comandos: nano /etc/vsftpd.conf
+
+Buscar la línea ssl_enable=NO y cambiarla a ssl_enable=YES
+
+Añadir estas dos líneas al final del archivo para enlazar el certificado que creamos:
+rsa_cert_file=/etc/ssl/private/vsftpd.pem
+rsa_private_key_file=/etc/ssl/private/vsftpd.pem
+
+Fase 4: Aplicación y Verificación Continua
+La nueva configuración requiere reiniciar el servicio. Después, el defensor vuelve a auditar para comprobar que el parche ha funcionado.
+
+Pensamiento: "Mato el proceso viejo para que lea el nuevo vsftpd.conf y vuelvo a testear el comando AUTH TLS."
+
+Comandos:
+
+pkill vsftpd
+
+/usr/sbin/vsftpd &
+
+(Verificación opcional): openssl s_client -connect localhost:21 -starttls ftp. Esto iniciará un túnel y mostrará los detalles del certificado autogenerado, demostrando que el tráfico ya va cifrado.

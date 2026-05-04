@@ -1,0 +1,35 @@
+Paso 1: Auditoría y asignación de contraseña al usuario root
+Antes de arreglar un problema, un buen defensor debe verificar su existencia. En este caso, el estudiante debe comprobar si existen cuentas privilegiadas expuestas sin contraseña.
+
+Comandos de detección (elegir uno): * ssh root@localhost (Al ver que entra directo sin pedir clave, confirmamos la brecha).
+
+passwd -S root (Si devuelve algo como root NP..., las siglas NP confirman que no hay password).
+
+Comando de remediación: sudo passwd root
+
+Explicación: Una vez confirmada la vulnerabilidad, este comando pedirá al jugador que introduzca y confirme una nueva contraseña para el superusuario. Al hacerlo, se elimina el estado "NP" y se sella la primera brecha crítica de seguridad.
+
+Paso 2: Editar y asegurar la configuración de SSH
+El núcleo del problema está en el archivo de configuración del servicio SSH. El validador lee la configuración activa y penaliza si encuentra las directivas permitrootlogin yes o permitemptypasswords yes.
+
+Comando: sudo nano /etc/ssh/sshd_config
+
+Explicación: Esto abre el archivo de configuración en un editor de texto. El jugador debe hacer dos cambios vitales:
+
+Buscar la línea PermitRootLogin yes y cambiarla a PermitRootLogin no. Esto evita que un atacante intente fuerza bruta contra el usuario root directamente por red.
+
+Buscar la línea PermitEmptyPasswords yes y cambiarla a PermitEmptyPasswords no. Esto asegura que el sistema rechace cualquier intento de conexión de cuentas que no tengan contraseña.
+
+Paso 3: Detener el servicio SSH vulnerable
+Cualquier cambio realizado en /etc/ssh/sshd_config no se aplica automáticamente; el servicio que está corriendo en memoria sigue siendo vulnerable.
+
+Comando: sudo pkill sshd
+
+Explicación: Este comando mata abruptamente todos los procesos en memoria que se llamen "sshd". El script de validación comprueba específicamente si el servicio está corriendo y si el proceso actual en memoria es más antiguo que la última modificación del archivo de configuración. Por tanto, es obligatorio matar el proceso viejo para poder levantar uno nuevo.
+
+Paso 4: Levantar el servicio con la configuración segura
+Para terminar de asegurar el sistema y devolverle la funcionalidad legítima, hay que volver a arrancar SSH.
+
+Comando: sudo /usr/sbin/sshd
+
+Explicación: Este comando arranca el demonio del servidor SSH leyendo inmediatamente el archivo /etc/ssh/sshd_config que acabamos de asegurar. Cuando el script de validación evalúe la máquina, verá que el proceso sshd está activo, que se inició después de modificar el archivo de configuración y que ya no permite configuraciones peligrosas.
