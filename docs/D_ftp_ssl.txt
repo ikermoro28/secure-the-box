@@ -20,7 +20,7 @@ Para que el tráfico se cifre, el servidor necesita un par de claves (Pública y
 
 Pensamiento: "Debo generar un certificado X.509 y una clave RSA para que VSFTPD pueda negociar el túnel seguro."
 
-Comando: openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/vsftpd.pem -out /etc/ssl/private/vsftpd.pem
+Comando: sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/vsftpd.pem -out /etc/ssl/private/vsftpd.pem
 (Pulsar Enter a todas las preguntas de país, organización, etc., para dejar los valores por defecto).
 
 Fase 3: Hardening (Forzando la configuración)
@@ -28,7 +28,7 @@ Hay que modificar la configuración del demonio para que use nuestro certificado
 
 Pensamiento: "Tengo que decirle al FTP dónde está el certificado y cambiar la directiva que deniega el SSL."
 
-Comandos: nano /etc/vsftpd.conf
+Comandos: sudo nano /etc/vsftpd.conf
 
 Buscar la línea ssl_enable=NO y cambiarla a ssl_enable=YES
 
@@ -43,8 +43,8 @@ Pensamiento: "Mato el proceso viejo para que lea el nuevo vsftpd.conf y vuelvo a
 
 Comandos:
 
-pkill vsftpd
+sudo pkill vsftpd
 
-/usr/sbin/vsftpd &
+sudo /usr/sbin/vsftpd &
 
 (Verificación opcional): openssl s_client -connect localhost:21 -starttls ftp. Esto iniciará un túnel y mostrará los detalles del certificado autogenerado, demostrando que el tráfico ya va cifrado.

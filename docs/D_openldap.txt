@@ -1,0 +1,44 @@
+Paso 1: Auditoría y detección de la vulnerabilidad (Fuga de datos)
+Antes de tocar la configuración, el defensor debe comprobar si el servidor de identidades permite consultas sin credenciales (Anonymous Bind), lo cual permitiría a un atacante volcar toda la estructura de la empresa.
+
+Comando de detección: ldapwhoami -x -H ldap://localhost
+
+Explicación: La herramienta ldapwhoami pregunta al servidor quiénes somos actualmente. La bandera -x indica un "Bind simple" (sin proporcionar usuario ni contraseña). Si el servidor responde con anonymous, confirmamos que el directorio está expuesto y es vulnerable a la exfiltración masiva de datos.
+
+Paso 2: Preparar el parche de configuración (Crear archivo LDIF)
+A diferencia de servicios clásicos como SSH o Apache donde editamos un archivo de texto plano (.conf), las versiones modernas de OpenLDAP usan un motor de configuración dinámico en base de datos llamado slapd-config (cn=config). Para modificarlo, debemos crear un archivo de instrucciones llamado LDIF.
+
+Comando: nano fix.ldif
+
+Explicación: Abrimos el editor de texto para crear un archivo temporal que contendrá las instrucciones de modificación que inyectaremos en el servidor.
+
+Paso 3: Escribir la regla de seguridad (Requerir Autenticación)
+Dentro del editor nano, el jugador debe escribir la directiva exacta para parchear la base de datos "frontend" (la que gestiona las conexiones entrantes).
+
+Contenido a introducir:
+
+dn: olcDatabase={-1}frontend,cn=config
+changetype: modify
+add: olcRequires
+olcRequires: authc
+
+Explicación:
+
+dn: Apunta al "Distinguished Name" de la configuración general del frontend.
+
+changetype: modify: Le dice a LDAP que no estamos creando una entrada nueva, sino alterando una existente.
+
+add: olcRequire / olcRequire: authc: Instruye al servidor a añadir una regla estricta que exige (Require) que la conexión esté autenticada (authc) antes de procesar cualquier búsqueda.
+(Para guardar en nano: Ctrl+O, Enter, Ctrl+X)
+
+Paso 4: Inyectar el parche en caliente al servidor LDAP
+Una vez creado el archivo con las instrucciones, hay que aplicarlo sobre la base de datos en ejecución.
+
+Comando de remediación: sudo ldapmodify -Y EXTERNAL -H ldapi:/// -f fix.ldif
+
+Explicación: Utilizamos la herramienta ldapmodify para inyectar nuestro archivo (-f fix.ldif). Al usar sudo junto con -Y EXTERNAL y conectarnos por el socket de Unix local (ldapi:///), el servidor LDAP nos reconoce automáticamente como administradores legítimos del sistema (root), permitiéndonos alterar la configuración de seguridad sin necesidad de conocer la contraseña de administrador de LDAP.
+
+Paso 5: Validación de la remediación
+Los cambios realizados mediante ldapmodify en la base de datos cn=config se aplican instantáneamente en la memoria del servidor. No es necesario reiniciar ningún servicio.
+
+Explicación: Si el jugador vuelve a intentar el ataque inicial ejecutando ldapwhoami -x -H ldap://localhost, el servidor ahora rechazará la conexión con un error de "Inappropriate authentication" o "Server is unwilling to perform", demostrando que las conexiones anónimas han sido bloqueadas. Al darle al botón "Comprobar Seguridad" en la plataforma, el validador de Python confirmará el bloqueo y el reto será superado.

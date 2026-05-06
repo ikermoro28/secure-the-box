@@ -86,6 +86,7 @@ class SecureTheBoxApp(ctk.CTk):
 
         self.textbox_log = ctk.CTkTextbox(self, height=150, font=("Consolas", 12))
         self.textbox_log.pack(pady=10, padx=20, fill="x")
+        self.textbox_log.configure(state="disabled")
         self.log("Sistema iniciado. Selecciona una máquina y despliega el escenario...")
 
         self.frame_buttons = ctk.CTkFrame(self, fg_color="transparent")
@@ -112,12 +113,12 @@ class SecureTheBoxApp(ctk.CTk):
         try:
             conexion = sqlite3.connect('sqlite-scripts.db')
             cursor = conexion.cursor()
-            cursor.execute("SELECT rowid, nombre_script, nivel_dificultad, descripcion, ruta_script, ruta_check, puntos_base FROM scripts")
+            cursor.execute("SELECT rowid, nombre_script, nivel_dificultad, descripcion, ruta_script, ruta_check, puntos_base, ruta_dockerfile FROM scripts")
             retos = cursor.fetchall()
             conexion.close()
 
             for index, reto in enumerate(retos):
-                r_id, nombre_s, dif, desc, r_script, r_check, puntos = reto
+                r_id, nombre_s, dif, desc, r_script, r_check, puntos, r_docker = reto
                 self.datos_retos[r_id] = reto
                 
                 dif = str(dif)
@@ -169,12 +170,12 @@ class SecureTheBoxApp(ctk.CTk):
         self.log(f"Máquina seleccionada: {reto_info[1]}")
 
     def log(self, message):
-        if message.strip() == "" or message.startswith("="):
-            self.textbox_log.insert("end", f"{message}\n")
-        else:
-            self.textbox_log.insert("end", f" >> {message}\n")
-            self.textbox_log.see("end")
-            self.update()
+        """Añade un mensaje a la consola con estilo prompt '>>>' SIEMPRE, incluso si está vacío"""
+        self.textbox_log.configure(state="normal")  # 1. Desbloqueamos para que el código pueda escribir        
+        self.textbox_log.insert("end", f">>> {message}\n")
+        self.textbox_log.see("end")
+        self.textbox_log.configure(state="disabled")  # 2. Volvemos a bloquear para el usuario
+        self.update()
 
     def show_inline_confirmation(self):
         self.btn_launch.grid_remove()
@@ -182,6 +183,7 @@ class SecureTheBoxApp(ctk.CTk):
         self.btn_check.grid_remove()
         self.btn_confirm_yes.grid(row=0, column=0, padx=10)
         self.btn_confirm_no.grid(row=0, column=1, padx=10)
+        self.log("¿Estás seguro de que quieres destruir el entorno?")
 
     def hide_inline_confirmation(self):
         self.btn_confirm_yes.grid_remove()
@@ -211,8 +213,11 @@ class SecureTheBoxApp(ctk.CTk):
             return
             
         reto = self.datos_retos.get(r_id)
-        _, nombre_s, _, _, ruta_script, self.ruta_check_actual, self.puntuacion_base_actual = reto
+        _, nombre_s, _, _, ruta_script, self.ruta_check_actual, self.puntuacion_base_actual, ruta_dockerfile = reto
         
+        if not ruta_dockerfile:
+            ruta_dockerfile = ".dockerfiles/Dockerfile.debian"
+
         try:
             with open("challenge_data.json", "r", encoding='utf-8') as f:
                 datos = json.load(f)
@@ -220,13 +225,15 @@ class SecureTheBoxApp(ctk.CTk):
         except:
             usuario_objetivo = "admin"
 
-        self.btn_launch.configure(state="disabled", text="CONSTRUYENDO...")
+        self.btn_launch.configure(state="disabled", text="🔨 CONSTRUYENDO...")
+        
+        self.log("")
+        self.log("INICIANDO PROCESO DE DESPLIEGUE...")
+        self.log("Construyendo y configurando el entorno...")
+        self.log("Esto puede tardar unos segundos...")
         
         try:
-            self.log(f"Iniciando: {nombre_s}")
-            
-            # capture_output=True añadido para silenciar la terminal física
-            subprocess.run(["docker", "build", "-q", "-t", "secure-the-box", "."], check=True, capture_output=True)
+            subprocess.run(["docker", "build", "-q", "-f", ruta_dockerfile, "-t", "secure-the-box", "."], check=True, capture_output=True)
             subprocess.run(["docker", "rm", "-f", self.nombre_contenedor], capture_output=True)
             
             comando_docker = ["docker", "run", "-d", "-it", "--name", self.nombre_contenedor, "--hostname", "securethebox", "--dns", "8.8.8.8"]
@@ -235,17 +242,14 @@ class SecureTheBoxApp(ctk.CTk):
                 comando_docker.extend(["-p", "6067:80"])
                 
             comando_docker.extend(["secure-the-box", "/bin/bash"])
-            # Silenciamos la salida del ID del contenedor, así no damos pistas al usuario
             subprocess.run(comando_docker, check=True, capture_output=True)
             
-            # Silenciamos el mensaje de Successfully copied, nuevamente para no dar pistas
             subprocess.run(["docker", "cp", ruta_script, f"{self.nombre_contenedor}:/tmp/setup.sh"], check=True, capture_output=True)
             
             subprocess.run(["docker", "exec", self.nombre_contenedor, "/bin/bash", "-c", 
                             f"echo 'Acquire::ForceIPv4 \"true\";' > /etc/apt/apt.conf.d/99force-ipv4 && export DEBIAN_FRONTEND=noninteractive; bash /tmp/setup.sh {usuario_objetivo}"], 
                             capture_output=True)
 
-            # Obtener usuario final
             res = subprocess.run(["docker", "exec", self.nombre_contenedor, "cat", "/tmp/terminal_user.txt"], capture_output=True, text=True)
             if res.returncode == 0:
                 self.usuario_terminal_actual = res.stdout.strip()
@@ -262,7 +266,14 @@ class SecureTheBoxApp(ctk.CTk):
             self.textbox_log.pack_configure(expand=True, fill="both")
             self.container_running = True
             
-            self.log(f"¡Listo! Terminal abierta en {home_dir} como {self.usuario_terminal_actual}")
+            self.log("")
+            self.log("¡ESCENARIO DESPLEGADO CON ÉXITO!")
+            self.log(f"Terminal abierta en {home_dir} como usuario: {self.usuario_terminal_actual}")
+            self.log(f"Contraseña del usuario: stb2024")
+            self.log("Usa el botón 'COMPROBAR SEGURIDAD' para probar la seguridad")
+            if nombre_s == "Web Securing":
+                self.log("Página web desplegada en localhost:6067")
+
             self.start_time = time.time() 
             self.btn_launch.configure(text="✅ RETO ACTIVO")
             self.btn_stop.configure(state="normal")
@@ -274,33 +285,79 @@ class SecureTheBoxApp(ctk.CTk):
                             self.nombre_contenedor, "/bin/bash"])
     
         except Exception as e:
-            self.log(f"ERROR: {e}")
+            self.log(f"ERROR CRÍTICO: {str(e)}")
+            self.log("Revirtiendo cambios...")
             self.reset_ui()
 
     def check_challenge(self):
         if not self.container_running: return
-        self.log("Auditando sistema...")
+        
+        self.btn_check.configure(state="disabled", text="🔍 EVALUANDO...")
+        self.log("")
+        self.log("INICIANDO AUDITORÍA DE SEGURIDAD...")
+        self.log("Evaluando configuraciones y servicios...")
+        
         try:
-            # Silenciamos la copia del script de check
             subprocess.run(["docker", "cp", self.ruta_check_actual.strip(), f"{self.nombre_contenedor}:/tmp/check.py"], check=True, capture_output=True)
             
-            res = subprocess.run(["docker", "exec", self.nombre_contenedor, "python3", "/tmp/check.py"], capture_output=True, text=True)
+            comando_check = "trap 'rm -f /tmp/check.py' EXIT; python3 /tmp/check.py"
+            res = subprocess.run(["docker", "exec", self.nombre_contenedor, "/bin/bash", "-c", comando_check], capture_output=True, text=True)
+            
+            salida = res.stdout.strip()
+            if salida:
+                for linea in salida.split('\n'):
+                    if linea.strip(): self.log(linea)
+                        
+            elapsed_seconds = int(time.time() - self.start_time)
+            minutos = elapsed_seconds // 60
+            segundos = elapsed_seconds % 60
+            tiempo_texto = f"{minutos}m {segundos}s"
+
+            self.log("")
             if res.returncode == 0:
-                self.log("✅ SISTEMA SEGURO")
-                time.sleep(2)
+                if elapsed_seconds <= 240:          
+                    puntos_ganados = self.puntuacion_base_actual
+                elif elapsed_seconds <= 600:        
+                    puntos_ganados = int(self.puntuacion_base_actual * 0.75)
+                else:                               
+                    puntos_ganados = int(self.puntuacion_base_actual * 0.50)
+
+                self.log("¡ENHORABUENA! El sistema ha sido asegurado correctamente")
+                self.log("✅ RESULTADO: SISTEMA SEGURO")
+                self.log(f"Tiempo empleado: {tiempo_texto}")
+                self.log(f"Puntuación obtenida: {puntos_ganados} / {self.puntuacion_base_actual} pts")
+                self.log("")
+                self.log("Cerrando la máquina en 3 segundos...")
+                time.sleep(3)
                 self.stop_challenge()
             else:
-                self.log("❌ SISTEMA VULNERABLE")
+                self.log("El sistema aún tiene vulnerabilidades que necesitan ser corregidas")
+                self.log("Revisa las configuraciones de seguridad y continúa trabajando")
+                self.log("❌ RESULTADO: SISTEMA VULNERABLE")
+                
         except Exception as e:
-            self.log(f"Error en auditoría: {e}")
+            self.log(f"ERROR durante la auditoría: {str(e)}")
+        finally:
+            self.btn_check.configure(state="normal", text="✅ COMPROBAR SEGURIDAD")
 
     def stop_challenge(self):
-        subprocess.run(["docker", "rm", "-f", self.nombre_contenedor], capture_output=True)
+        self.log("")
+        self.log("DETENIENDO RETO Y LIMPIANDO ENTORNO...")
+        self.btn_stop.configure(state="disabled", text="⏹ DETENIENDO...")
+        
+        try:
+            subprocess.run(["docker", "rm", "-f", self.nombre_contenedor], capture_output=True)
+            self.container_running = False
+            self.log("Entorno limpio. Puedes seleccionar otro reto.")
+            self.log("")
+        except Exception as e:
+            self.log(f"Error al detener: {e}")
+            
         self.reset_ui()
 
     def reset_ui(self):
         self.btn_launch.configure(state="normal", text="🚀 DESPLEGAR ESCENARIO")
-        self.btn_stop.configure(state="disabled")
+        self.btn_stop.configure(state="disabled", text="⏹ DETENER RETO")
         self.btn_check.grid_remove()
         self.container_running = False
         self.frame_lista_container.pack(pady=5, padx=20, fill="both", expand=True, before=self.textbox_log)
@@ -308,7 +365,10 @@ class SecureTheBoxApp(ctk.CTk):
         self.reto_seleccionado_id.set(-1)
         for card in self.tarjetas_retos.values():
             card.configure(fg_color="#222222", border_color="#222222")
-        
+        # --- EL TRUCO ESTÁ AQUÍ ---
+        self.update() # Obligamos a la app a renderizar los cambios de tamaño primero
+        self.textbox_log.see("end") # Y ahora le decimos que haga scroll hasta el final
+
     def on_closing(self):
         if self.container_running:
             CustomConfirmDialog(self, "Salir", "¿Destruir reto y salir?", self.destroy_and_quit)
@@ -316,6 +376,7 @@ class SecureTheBoxApp(ctk.CTk):
             self.destroy()
 
     def destroy_and_quit(self):
+        self.log("Cerrando aplicación...")
         subprocess.run(["docker", "rm", "-f", self.nombre_contenedor], capture_output=True)
         self.destroy()
 

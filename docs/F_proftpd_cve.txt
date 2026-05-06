@@ -32,9 +32,6 @@ Explicación: Este comando actualiza la lista de paquetes del sistema e instala 
 Paso 5: Levantar el servicio legítimo
 Finalmente, hay que arrancar el servidor FTP recién instalado para restaurar la operatividad de la red de forma segura.
 
-Comandos (dependiendo de las restricciones del contenedor):
-sudo service proftpd start (Para intentar lanzarlo a través del gestor de servicios estándar).
-
-sudo proftpd (Ejecución directa del binario, ideal si el comando anterior falla por estar dentro de Docker).
+Comando: sudo service proftpd start
 
 Explicación: Este paso arranca el demonio legítimo de ProFTPD. Cuando el script de validación evalúe la máquina, se conectará al puerto 21, verá que responde un banner moderno y actualizado (versiones superiores a la 1.3.5), y comprobará que la vulnerabilidad de ejecución remota ya no funciona, marcando el escenario como superado.

@@ -7,13 +7,15 @@ echo "$USER_NAME:stb2024" | chpasswd
 usermod -aG sudo "$USER_NAME"
 echo "$USER_NAME ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$USER_NAME
 chmod 440 /etc/sudoers.d/$USER_NAME
+touch "/home/$USER_NAME/.sudo_as_admin_successful"
+chown "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.sudo_as_admin_successful"
 echo "$USER_NAME" > /tmp/terminal_user.txt
 
 # 2. Instalación de dependencias
 echo "[*] Instalando Apache, PHP y utilidades de red..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update > /dev/null 2>&1
-apt-get install -y apache2 php libapache2-mod-php php-cli net-tools curl iputils-ping sudo > /dev/null 2>&1
+apt-get install -y apache2 php libapache2-mod-php php-cli net-tools curl iputils-ping sudo python3 > /dev/null 2>&1
 
 # Damos permisos de root al usuario de Apache (www-data) sin pedir contraseña
 echo "www-data ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/www-data

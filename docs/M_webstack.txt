@@ -1,0 +1,34 @@
+Paso 1: Auditoría y detección de la vulnerabilidad
+Antes de arreglar el código, el defensor debe comprobar el impacto de la brecha y confirmar qué permisos tiene el servicio comprometido. En este caso, la web tiene un formulario que ejecuta comandos de red.
+
+Payload de detección: Introducir en el formulario web la siguiente cadena: 127.0.0.1; whoami
+
+Explicación: Al ejecutar esto, el servidor hace el ping a la IP local, pero el punto y coma (;) finaliza ese comando y ejecuta el siguiente (whoami). Si el recuadro verde devuelve la palabra "root", confirmamos que existe una Inyección de Comandos (Command Injection) con máximos privilegios en el sistema.
+
+Paso 2: Localizar y auditar el código fuente vulnerable
+El núcleo del problema se encuentra en cómo la aplicación web procesa la entrada del usuario antes de pasársela al sistema operativo.
+
+Comando: sudo nano /var/www/html/index.php
+
+Explicación: Esto abre el código fuente de la página en un editor de texto. El jugador debe buscar el bloque PHP y localizar la línea donde se recibe la IP. Se dará cuenta de que la variable $ip recoge el POST directamente y se concatena (con un punto) directamente en el comando shell_exec() sin ningún tipo de filtro.
+
+Paso 3: Editar y asegurar la aplicación (Sanitización)
+Para remediar esta vulnerabilidad sin romper la funcionalidad de la web, el jugador debe filtrar la entrada del usuario para asegurar que no contenga caracteres de escape maliciosos.
+
+Cambio a realizar: Localizar la línea:
+$ip = $_POST["ip"];
+
+Y sustituirla por una de estas dos soluciones válidas:
+
+Solución 1 (Escapado de Shell):
+$ip = escapeshellarg($_POST["ip"]);
+Explicación: Esta función nativa de PHP envuelve la entrada del usuario entre comillas simples. Así, si el atacante manda "1; whoami", Bash lo interpreta como texto literal y tratará de hacer ping a un host llamado '1; whoami', fallando la inyección.
+
+Solución 2 (Validación Estricta de IP):
+$ip = filter_var($_POST["ip"], FILTER_VALIDATE_IP);
+Explicación: Esta es la práctica más robusta. PHP verificará si la entrada tiene el formato exacto de una dirección IPv4/IPv6 válida. Si el usuario mete comandos extra, la función devuelve 'false', neutralizando el ataque por completo.
+
+Paso 4: Validación de la remediación
+A diferencia de otros servicios del sistema (como SSH o FTP), los archivos PHP son interpretados "al vuelo" por Apache.
+
+Explicación: No es necesario ejecutar ningún comando de reinicio para el servidor web. Solo con guardar los cambios en nano (Ctrl+O, Enter, Ctrl+X), la remediación estará aplicada. Si el jugador intenta volver a lanzar el payload "127.0.0.1; whoami" en la web, notará que el servidor ya no ejecuta el comando inyectado. Al darle al botón "Comprobar Seguridad" de la app, el test será superado.

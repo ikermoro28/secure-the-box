@@ -1,0 +1,17 @@
+# Usamos la imagen oficial de OpenLDAP
+FROM osixia/openldap:1.5.0
+
+# Evitamos prompts interactivos durante el build
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 1. Borramos los repositorios antiguos y configuramos los históricos de Debian Buster
+# 2. Desactivamos la comprobación de fecha (Check-Valid-Until) porque los repos archivados están caducados
+# 3. Hacemos el update e instalamos nuestras herramientas
+RUN echo "deb http://archive.debian.org/debian buster main" > /etc/apt/sources.list && \
+    echo "deb http://archive.debian.org/debian-security buster/updates main" >> /etc/apt/sources.list && \
+    echo "Acquire::Check-Valid-Until \"false\";" > /etc/apt/apt.conf.d/10no-check-valid-until && \
+    apt-get update && \
+    apt-get install -y sudo nano python3 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Dejamos que la imagen use su propio ENTRYPOINT y CMD para arrancar la base de datos LDAP.
