@@ -16,6 +16,7 @@ Para configurar el entorno, las dependencias de Python (venv) y los permisos de 
 
 ```bash
 sudo bash setup.sh
+´´´
 🚀 Cómo ejecutar la aplicación
 Una vez finalizada la instalación, puedes iniciar la plataforma de dos maneras:
 
