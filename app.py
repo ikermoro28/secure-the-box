@@ -1,4 +1,5 @@
 import customtkinter as ctk
+import tkinter as tk
 import os
 import subprocess
 import threading
@@ -53,6 +54,14 @@ class SecureTheBoxApp(ctk.CTk):
         self.start_time = 0             
         self.title("Secure The Box - Defensive CTF Trainer")
         self.geometry("850x800") 
+        try:
+            # Asegúrate de que logo.png esté en la misma carpeta que app.py
+            icono = tk.PhotoImage(file="logo.png")
+            # El "True" hace que el icono se aplique también a ventanas secundarias
+            self.iconphoto(True, icono)
+        except Exception as e:
+            print(f"Error al cargar el icono: {e}")
+
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
         # Variables de estado
