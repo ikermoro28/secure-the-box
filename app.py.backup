@@ -145,27 +145,27 @@ class SecureTheBoxApp(ctk.CTk):
                 card.grid(row=fila, column=columna, pady=8, padx=8, sticky="nsew")
                 self.tarjetas_retos[r_id] = card 
 
-                # Título con fuente un poco más grande y gruesa (margen superior ajustado al no tener header)
-                title_label = ctk.CTkLabel(card, text=nombre_s, anchor="w", font=ctk.CTkFont(size=16, weight="bold"))
-                title_label.pack(fill="x", padx=12, pady=(15, 5))
+                header_frame = ctk.CTkFrame(card, fg_color="transparent")
+                header_frame.pack(fill="x", padx=12, pady=(12, 5))
 
-                desc_label = ctk.CTkLabel(card, text=desc, anchor="nw", justify="left", text_color="#aaaaaa", wraplength=210, font=ctk.CTkFont(size=14))
+                # ETIQUETA DIFICULTAD: Borde más grueso (border_width=2) y texto más marcado
+                diff_label_frame = ctk.CTkFrame(header_frame, border_color=color_dif, border_width=0, fg_color="transparent", corner_radius=5)
+                diff_label_frame.pack(side="left")
+                ctk.CTkLabel(diff_label_frame, text=texto_dif, text_color=color_dif, 
+                             font=ctk.CTkFont(size=11, weight="bold")).pack(padx=0, pady=3)
+
+                # Título con fuente un poco más grande y gruesa
+                title_label = ctk.CTkLabel(card, text=nombre_s, anchor="w", font=ctk.CTkFont(size=16, weight="bold"))
+                title_label.pack(fill="x", padx=12, pady=(5, 5))
+
+                desc_label = ctk.CTkLabel(card, text=desc, anchor="nw", justify="left", text_color="#aaaaaa", wraplength=210, font=ctk.CTkFont(size=12))
                 desc_label.pack(fill="both", expand=True, padx=12, pady=(0, 10))
 
                 ctk.CTkFrame(card, height=1, fg_color="#333333").pack(fill="x", padx=12, pady=(0, 10))
-                
-                # FOOTER: Contendrá Dificultad a la Izquierda y Puntos a la Derecha
                 footer_frame = ctk.CTkFrame(card, fg_color="transparent")
                 footer_frame.pack(fill="x", padx=12, pady=(0, 12))
                 
-                # ETIQUETA DIFICULTAD: Colocada a la izquierda del footer con tu mismo estilo
-                diff_label_frame = ctk.CTkFrame(footer_frame, border_color=color_dif, border_width=0, fg_color="transparent", corner_radius=5)
-                diff_label_frame.pack(side="left")
-                ctk.CTkLabel(diff_label_frame, text=texto_dif, text_color=color_dif, 
-                             font=ctk.CTkFont(size=13, weight="bold")).pack(padx=0, pady=3)
-                
-                # PUNTOS: Colocados a la derecha del footer
-                ctk.CTkLabel(footer_frame, text=f"{puntos} PTS", text_color=color_dif, font=ctk.CTkFont(size=13, weight="bold")).pack(side="right")
+                ctk.CTkLabel(footer_frame, text=f"{puntos} PTS", text_color=color_dif, font=ctk.CTkFont(size=15, weight="bold")).pack(side="right")
 
                 self.bind_recursion(card, r_id)
         except Exception as e:
