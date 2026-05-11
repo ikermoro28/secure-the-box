@@ -1,0 +1,208 @@
+Paso 1: Inspección inicial del caso forense
+
+Antes de remediar un incidente, el defensor debe entender qué ocurrió y localizar las evidencias disponibles. El reto está organizado como un pequeño caso DFIR con logs, artefactos de sistema y datos de red.
+
+Comandos recomendados:
+
+ls -R /opt/case
+
+o:
+
+find /opt/case
+
+Explicación:
+
+Estos comandos permiten descubrir la estructura completa del caso. El jugador verá directorios como:
+
+/opt/case/logs/
+/opt/case/filesystem/
+/opt/case/network/
+
+Esto confirma que el reto se basa en investigación forense y no únicamente en hardening tradicional.
+
+Paso 2: Descubrir el vector inicial de compromiso
+
+El atacante comprometió el dispositivo mediante ADB expuesto por red. El jugador debe localizar pruebas del acceso remoto.
+
+Comando:
+
+cat /opt/case/logs/adb.log
+
+También puede usarse:
+
+grep -i "connection" /opt/case/logs/adb.log
+
+Explicación:
+
+El log contiene evidencias críticas:
+
+ADB escuchando en el puerto 5555
+conexión remota entrante
+apertura de shell
+instalación de malware
+
+El jugador debe identificar especialmente:
+
+185.220.101.44
+
+que corresponde a la IP atacante.
+
+También se puede observar:
+
+adbd listening on port 5555
+
+lo que confirma que ADB over TCP estaba habilitado.
+
+Paso 3: Identificar el malware instalado
+
+Tras obtener acceso, el atacante instaló una aplicación maliciosa llamada:
+
+com.system.update
+
+Comando:
+
+find /opt/case/filesystem/data/app
+
+o:
+
+ls -R /opt/case/filesystem/data/app
+
+Explicación:
+
+El jugador localizará un directorio sospechoso:
+
+/opt/case/filesystem/data/app/com.system.update
+
+El nombre intenta parecer legítimo para ocultarse como una actualización del sistema Android.
+
+Paso 4: Analizar el contenido de la APK simulada
+
+El defensor debe inspeccionar el contenido del supuesto APK para identificar indicadores de compromiso.
+
+Comando:
+
+cat /opt/case/filesystem/data/app/com.system.update/base.apk
+
+También puede usarse:
+
+grep -i "sync" /opt/case/filesystem/data/app/com.system.update/base.apk
+
+Explicación:
+
+El archivo contiene información incriminatoria:
+
+api.sync-cloud.com
+
+Ese dominio corresponde al servidor de mando y control (C2) utilizado para exfiltración de datos.
+
+El jugador debe guardar esta información para el informe IOC final.
+
+Paso 5: Analizar artefactos de red
+
+El siguiente paso consiste en investigar las conexiones sospechosas realizadas por el malware.
+
+Comando:
+
+cat /opt/case/network/dns.log
+
+y:
+
+cat /opt/case/network/netstat.txt
+
+Explicación:
+
+Aquí aparecen:
+
+dominios sospechosos
+conexiones salientes
+posible infraestructura atacante
+
+El dominio importante es:
+
+api.sync-cloud.com
+Paso 6: Revisar la configuración insegura de ADB
+
+El atacante dejó el sistema expuesto manteniendo ADB habilitado remotamente.
+
+Comando:
+
+cat /opt/case/filesystem/settings_global.xml
+
+Explicación:
+
+El jugador observará:
+
+<setting name="adb_enabled" value="1" />
+<setting name="adb_wifi_enabled" value="1" />
+
+Esto significa:
+
+ADB activo
+ADB over WiFi/TCP activo
+
+Ambas configuraciones son inseguras.
+
+Paso 7: Corregir la configuración vulnerable
+
+El jugador debe editar el archivo y desactivar ambas opciones.
+
+Comando:
+
+nano /opt/case/filesystem/settings_global.xml
+
+Cambios necesarios:
+
+<setting name="adb_enabled" value="0" />
+<setting name="adb_wifi_enabled" value="0" />
+
+Explicación:
+
+Con esto se elimina la superficie de exposición remota utilizada por el atacante.
+
+El script de validación comprobará específicamente que ambos valores sean 0.
+
+Paso 8: Eliminar el malware
+
+Una vez identificada la aplicación maliciosa, el defensor debe eliminarla completamente.
+
+Comando:
+
+rm -rf /opt/case/filesystem/data/app/com.system.update
+
+Explicación:
+
+Esto elimina:
+
+APK maliciosa
+artefactos asociados
+persistencia simulada
+
+El validador comprueba que el directorio deje de existir.
+
+Paso 9: Crear el informe IOC
+
+El reto exige generar un pequeño informe DFIR con los indicadores de compromiso descubiertos durante la investigación.
+
+Ubicación obligatoria:
+
+/home/<usuario>/ioc-report.txt
+
+Comando:
+
+nano ~/ioc-report.txt
+
+Contenido mínimo requerido:
+
+Attacker IP: 185.220.101.44
+Malicious Domain: api.sync-cloud.com
+Malware Package: com.system.update
+
+Explicación:
+
+El script de comprobación buscará específicamente:
+
+IP atacante
+dominio malicioso
+nombre del paquete
+
+Si falta cualquiera de los tres indicadores, el reto seguirá considerándose vulnerable.
