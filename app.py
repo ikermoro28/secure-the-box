@@ -124,7 +124,14 @@ class SecureTheBoxApp(ctk.CTk):
         try:
             conexion = sqlite3.connect('sqlite-scripts.db')
             cursor = conexion.cursor()
-            cursor.execute("SELECT rowid, nombre_script, nivel_dificultad, descripcion, ruta_script, ruta_check, puntos_base, ruta_dockerfile FROM scripts")
+
+            cursor.execute("""
+                SELECT rowid, nombre_script, nivel_dificultad, descripcion,
+                       sistema_operativo, ruta_script, ruta_check,
+                       puntos_base, ruta_dockerfile
+                FROM scripts
+            """)
+
             retos = cursor.fetchall()
             conexion.close()
 
@@ -139,7 +146,7 @@ class SecureTheBoxApp(ctk.CTk):
             retos.sort(key=calcular_peso_dificultad)
 
             for index, reto in enumerate(retos):
-                r_id, nombre_s, dif, desc, r_script, r_check, puntos, r_docker = reto
+                r_id, nombre_s, dif, desc, sistema_operativo, r_script, r_check, puntos, r_docker = reto
                 self.datos_retos[r_id] = reto
                 
                 dif = str(dif)
@@ -154,12 +161,32 @@ class SecureTheBoxApp(ctk.CTk):
                 card.grid(row=fila, column=columna, pady=8, padx=8, sticky="nsew")
                 self.tarjetas_retos[r_id] = card 
 
-                # Título con fuente un poco más grande y gruesa (margen superior ajustado al no tener header)
+                # Título con fuente un poco más grande y gruesa
                 title_label = ctk.CTkLabel(card, text=nombre_s, anchor="w", font=ctk.CTkFont(size=16, weight="bold"))
                 title_label.pack(fill="x", padx=12, pady=(15, 5))
 
-                desc_label = ctk.CTkLabel(card, text=desc, anchor="nw", justify="left", text_color="#aaaaaa", wraplength=210, font=ctk.CTkFont(size=14))
-                desc_label.pack(fill="both", expand=True, padx=12, pady=(0, 10))
+                # Descripción
+                desc_label = ctk.CTkLabel(
+                    card,
+                    text=desc,
+                    anchor="nw",
+                    justify="left",
+                    text_color="#aaaaaa",
+                    wraplength=210,
+                    font=ctk.CTkFont(size=14)
+                )
+                desc_label.pack(fill="both", expand=True, padx=12, pady=(0, 5))
+
+                # Sistema operativo debajo de la descripción
+                so_label = ctk.CTkLabel(
+                    card,
+                    text=f"🖥️ {sistema_operativo}",
+                    anchor="w",
+                    justify="left",
+                    text_color="#7FDE62",
+                    font=ctk.CTkFont(size=13, weight="bold")
+                )
+                so_label.pack(fill="x", padx=12, pady=(0, 10))
 
                 ctk.CTkFrame(card, height=1, fg_color="#333333").pack(fill="x", padx=12, pady=(0, 10))
                 
@@ -167,16 +194,27 @@ class SecureTheBoxApp(ctk.CTk):
                 footer_frame = ctk.CTkFrame(card, fg_color="transparent")
                 footer_frame.pack(fill="x", padx=12, pady=(0, 12))
                 
-                # ETIQUETA DIFICULTAD: Colocada a la izquierda del footer con tu mismo estilo
+                # ETIQUETA DIFICULTAD
                 diff_label_frame = ctk.CTkFrame(footer_frame, border_color=color_dif, border_width=0, fg_color="transparent", corner_radius=5)
                 diff_label_frame.pack(side="left")
-                ctk.CTkLabel(diff_label_frame, text=texto_dif, text_color=color_dif, 
-                             font=ctk.CTkFont(size=13, weight="bold")).pack(padx=0, pady=3)
+
+                ctk.CTkLabel(
+                    diff_label_frame,
+                    text=texto_dif,
+                    text_color=color_dif,
+                    font=ctk.CTkFont(size=13, weight="bold")
+                ).pack(padx=0, pady=3)
                 
-                # PUNTOS: Colocados a la derecha del footer
-                ctk.CTkLabel(footer_frame, text=f"{puntos} PTS", text_color=color_dif, font=ctk.CTkFont(size=13, weight="bold")).pack(side="right")
+                # PUNTOS
+                ctk.CTkLabel(
+                    footer_frame,
+                    text=f"{puntos} PTS",
+                    text_color=color_dif,
+                    font=ctk.CTkFont(size=13, weight="bold")
+                ).pack(side="right")
 
                 self.bind_recursion(card, r_id)
+
         except Exception as e:
             self.log(f"Error al cargar retos: {e}")
 
@@ -189,19 +227,24 @@ class SecureTheBoxApp(ctk.CTk):
         self.reto_seleccionado_id.set(r_id)
         for card in self.tarjetas_retos.values():
             card.configure(fg_color="#1a1a1a", border_color="#333333")
+
         selected_card = self.tarjetas_retos[r_id]
         reto_info = self.datos_retos[r_id]
         dif = str(reto_info[2]) 
         color_dif = DIFICULTAD_COLORS.get(dif.lower(), '#337ab7') 
+
         selected_card.configure(fg_color="#252525", border_color=color_dif)
         self.log(f"Máquina seleccionada: {reto_info[1]}")
 
     def log(self, message):
+        # self.after(0, ...) envía la tarea al hilo principal de la GUI de forma segura
+        self.after(0, self._safe_log, message)
+
+    def _safe_log(self, message):
         self.textbox_log.configure(state="normal")      
         self.textbox_log.insert("end", f">>> {message}\n")
         self.textbox_log.see("end")
         self.textbox_log.configure(state="disabled")
-        self.update()
 
     def show_inline_confirmation(self):
         self.btn_launch.grid_remove()
@@ -234,12 +277,14 @@ class SecureTheBoxApp(ctk.CTk):
 
     def launch_challenge(self):
         r_id = self.reto_seleccionado_id.get()
+
         if r_id == -1:
             self.log("ERROR: Selecciona una máquina.")
             return
             
         reto = self.datos_retos.get(r_id)
-        _, nombre_s, _, _, ruta_script, self.ruta_check_actual, self.puntuacion_base_actual, ruta_dockerfile = reto
+
+        _, nombre_s, _, _, _, ruta_script, self.ruta_check_actual, self.puntuacion_base_actual, ruta_dockerfile = reto
         
         if not ruta_dockerfile:
             ruta_dockerfile = ".dockerfiles/Dockerfile.debian"
@@ -263,6 +308,7 @@ class SecureTheBoxApp(ctk.CTk):
             subprocess.run(["docker", "rm", "-f", self.nombre_contenedor], capture_output=True)
             
             comando_docker = ["docker", "run", "-d", "-it", "--name", self.nombre_contenedor, "--hostname", "securethebox", "--dns", "8.8.8.8"]
+
             if nombre_s == "Web Securing":
                 subprocess.run(["fuser", "-k", "6067/tcp"], capture_output=True)
                 comando_docker.extend(["-p", "6067:80"])
@@ -272,11 +318,13 @@ class SecureTheBoxApp(ctk.CTk):
             
             subprocess.run(["docker", "cp", ruta_script, f"{self.nombre_contenedor}:/tmp/setup.sh"], check=True, capture_output=True)
             
-            subprocess.run(["docker", "exec", self.nombre_contenedor, "/bin/bash", "-c", 
-                            f"echo 'Acquire::ForceIPv4 \"true\";' > /etc/apt/apt.conf.d/99force-ipv4 && export DEBIAN_FRONTEND=noninteractive; bash /tmp/setup.sh {usuario_objetivo}"], 
-                            capture_output=True)
+            subprocess.run([
+                "docker", "exec", self.nombre_contenedor, "/bin/bash", "-c",
+                f"echo 'Acquire::ForceIPv4 \"true\";' > /etc/apt/apt.conf.d/99force-ipv4 && export DEBIAN_FRONTEND=noninteractive; bash /tmp/setup.sh {usuario_objetivo}"
+            ], capture_output=True)
 
             res = subprocess.run(["docker", "exec", self.nombre_contenedor, "cat", "/tmp/terminal_user.txt"], capture_output=True, text=True)
+
             if res.returncode == 0:
                 self.usuario_terminal_actual = res.stdout.strip()
             else:
@@ -297,6 +345,7 @@ class SecureTheBoxApp(ctk.CTk):
             self.log(f"Terminal abierta en {home_dir} como usuario: {self.usuario_terminal_actual}")
             self.log(f"Contraseña del usuario: stb2024")
             self.log("Usa el botón 'COMPROBAR SEGURIDAD' para probar la seguridad")
+
             if nombre_s == "Web Securing":
                 self.log("Página web desplegada en localhost:6067")
 
@@ -305,10 +354,12 @@ class SecureTheBoxApp(ctk.CTk):
             self.btn_stop.configure(state="normal")
             self.btn_check.grid(row=0, column=2, padx=10)
             
-            subprocess.Popen(["gnome-terminal", "--", "docker", "exec", "-it", 
-                            "-u", self.usuario_terminal_actual, 
-                            "-w", home_dir, 
-                            self.nombre_contenedor, "/bin/bash"])
+            subprocess.Popen([
+                "gnome-terminal", "--", "docker", "exec", "-it",
+                "-u", self.usuario_terminal_actual,
+                "-w", home_dir,
+                self.nombre_contenedor, "/bin/bash"
+            ])
     
         except Exception as e:
             self.log(f"ERROR CRÍTICO: {str(e)}")
@@ -316,7 +367,8 @@ class SecureTheBoxApp(ctk.CTk):
             self.reset_ui()
 
     def check_challenge(self):
-        if not self.container_running: return
+        if not self.container_running:
+            return
         
         self.btn_check.configure(state="disabled", text="🔍 EVALUANDO...")
         self.log("")
@@ -327,12 +379,19 @@ class SecureTheBoxApp(ctk.CTk):
             subprocess.run(["docker", "cp", self.ruta_check_actual.strip(), f"{self.nombre_contenedor}:/tmp/check.py"], check=True, capture_output=True)
             
             comando_check = "trap 'rm -f /tmp/check.py' EXIT; python3 /tmp/check.py"
-            res = subprocess.run(["docker", "exec", self.nombre_contenedor, "/bin/bash", "-c", comando_check], capture_output=True, text=True)
+
+            res = subprocess.run(
+                ["docker", "exec", self.nombre_contenedor, "/bin/bash", "-c", comando_check],
+                capture_output=True,
+                text=True
+            )
             
             salida = res.stdout.strip()
+
             if salida:
                 for linea in salida.split('\n'):
-                    if linea.strip(): self.log(linea)
+                    if linea.strip():
+                        self.log(linea)
                         
             elapsed_seconds = int(time.time() - self.start_time)
             minutos = elapsed_seconds // 60
@@ -340,12 +399,13 @@ class SecureTheBoxApp(ctk.CTk):
             tiempo_texto = f"{minutos}m {segundos}s"
 
             self.log("")
+
             if res.returncode == 0:
-                if elapsed_seconds <= 240:          
+                if elapsed_seconds <= 240:
                     puntos_ganados = self.puntuacion_base_actual
-                elif elapsed_seconds <= 600:        
+                elif elapsed_seconds <= 600:
                     puntos_ganados = int(self.puntuacion_base_actual * 0.75)
-                else:                               
+                else:
                     puntos_ganados = int(self.puntuacion_base_actual * 0.50)
 
                 self.log("¡ENHORABUENA! El sistema ha sido asegurado correctamente")
@@ -354,8 +414,10 @@ class SecureTheBoxApp(ctk.CTk):
                 self.log(f"Puntuación obtenida: {puntos_ganados} / {self.puntuacion_base_actual} pts")
                 self.log("")
                 self.log("Cerrando la máquina en 3 segundos...")
+
                 time.sleep(3)
                 self.stop_challenge()
+
             else:
                 self.log("El sistema aún tiene vulnerabilidades que necesitan ser corregidas")
                 self.log("Revisa las configuraciones de seguridad y continúa trabajando")
@@ -363,6 +425,7 @@ class SecureTheBoxApp(ctk.CTk):
                 
         except Exception as e:
             self.log(f"ERROR durante la auditoría: {str(e)}")
+
         finally:
             self.btn_check.configure(state="normal", text="✅ COMPROBAR SEGURIDAD")
 
@@ -376,6 +439,7 @@ class SecureTheBoxApp(ctk.CTk):
             self.container_running = False
             self.log("Entorno limpio. Puedes seleccionar otro reto.")
             self.log("")
+
         except Exception as e:
             self.log(f"Error al detener: {e}")
             
@@ -386,12 +450,22 @@ class SecureTheBoxApp(ctk.CTk):
         self.btn_stop.configure(state="disabled", text="⏹ DETENER RETO")
         self.btn_check.grid_remove()
         self.container_running = False
-        self.frame_lista_container.pack(pady=5, padx=20, fill="both", expand=True, before=self.textbox_log)
+
+        self.frame_lista_container.pack(
+            pady=5,
+            padx=20,
+            fill="both",
+            expand=True,
+            before=self.textbox_log
+        )
+
         self.textbox_log.pack_configure(expand=False, fill="x")
         self.reto_seleccionado_id.set(-1)
+
         for card in self.tarjetas_retos.values():
             card.configure(fg_color="#1a1a1a", border_color="#333333")
-        self.update() 
+
+        # Eliminado self.update() para prevenir bloqueos en la interfaz gráfica
         self.textbox_log.see("end") 
 
     def on_closing(self):

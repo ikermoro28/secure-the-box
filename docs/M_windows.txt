@@ -1,0 +1,33 @@
+Nota de Simulación: Aunque el terminal tenga aspecto visual de PowerShell ("PS C:\Users\admin>"), la máquina subyacente responde a comandos de Linux. Sigue usando la barra normal (/) para moverte por las rutas.
+
+Paso 1: Análisis Forense de las evidencias del USB
+Antes de arreglar un problema, un buen defensor debe investigar el origen de la infección. El equipo de respuesta a incidentes ha volcado los artefactos del USB infectado y los logs del antivirus en la ruta nativa de eventos de Windows: C:\Windows\System32\winevt\Logs\Triage_USB.
+
+Comandos de detección (elegir uno o varios):
+* cat /Windows/System32/winevt/Logs/Triage_USB/autorun.inf (Al leer este archivo, veremos la directiva "open=sysupdate.exe", indicando qué se ejecutó al conectar el USB).
+* cat /Windows/System32/winevt/Logs/Triage_USB/Windows_Defender.log (Revela que el antivirus detectó un troyano asociado al archivo "sysupdate.exe" pero falló al ponerlo en cuarentena).
+
+Explicación: La fase de triaje forense es vital. Al examinar estos archivos simulados en la ruta de logs del sistema, confirmamos de manera irrefutable que el ejecutable malicioso introducido por el USB responde al nombre de "sysupdate.exe". Con este Indicador de Compromiso (IoC), podemos empezar a cazar la amenaza.
+
+Paso 2: Localización y eliminación del ejecutable malicioso
+Sabiendo que el malware se llama "sysupdate.exe", el siguiente paso lógico es rastrear en qué lugar del disco duro se ha escondido el binario para neutralizarlo.
+
+Comando de detección:
+* find / -name "sysupdate.exe" 2>/dev/null
+
+Comando de remediación: sudo rm /ProgramData/sysupdate.exe
+
+Explicación: El comando de búsqueda localiza el archivo en todo el sistema y nos revelará que el malware está alojado en la carpeta oculta de Windows (simulada) `C:\ProgramData\sysupdate.exe` (en consola `/ProgramData/sysupdate.exe`). Una vez confirmada su ubicación, usamos `rm` con privilegios de administrador (`sudo`) para destruir el binario, deteniendo su capacidad de ejecución directa.
+
+Paso 3: Búsqueda y erradicación de la persistencia
+El malware moderno rara vez se conforma con ejecutarse una sola vez; crea mecanismos de persistencia. Se ha escondido creando una tarea programada simulada mediante el servicio cron.
+
+Comandos de detección:
+* dir /etc/cron.d/ (Listará las tareas programadas a nivel de sistema, revelando un archivo sospechoso llamado "Windows_Task_Scheduler").
+* cat /etc/cron.d/Windows_Task_Scheduler (Confirmará que esta tarea intenta ejecutar silenciosamente el malware "sysupdate.exe" periódicamente).
+
+Comando de remediación: sudo rm /etc/cron.d/Windows_Task_Scheduler
+
+Explicación: Un sistema no está limpio hasta que se elimina la persistencia. Los atacantes han intentado camuflar su rastro dándole a su tarea programada el nombre de un proceso legítimo ("Windows_Task_Scheduler"). Al eliminar este archivo, rompemos el ciclo de ejecución del malware para siempre. 
+
+Cuando uses la herramienta gráfica de "COMPROBAR SEGURIDAD", el validador verificará que tanto el malware de ProgramData como la tarea programada hayan sido destruidos.
